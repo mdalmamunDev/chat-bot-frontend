@@ -1,11 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Send, Sparkles } from 'lucide-react';
+import axios from 'axios';
 
-interface Message {
-  id: string;
-  role: 'user' | 'assistant';
-  content: string;
-}
+// Add imports at the top
+import ReactMarkdown from 'react-markdown';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
+
 
 const suggestedPrompts = [
   'Explain quantum computing simply',
@@ -32,21 +33,25 @@ export default function App() {
     inputRef.current?.focus();
   }, []);
 
-  const aiReply = (userMessage: string) => {
-    const lower = userMessage.toLowerCase();
-    if (lower.includes('quantum')) {
-      return "Quantum computing uses qubits, which—unlike regular bits—can be both 0 and 1 at once (superposition). This lets quantum computers explore many possibilities simultaneously, making them powerful for certain problems like cryptography and molecular simulation.";
+  const aiReply = async (userMessage: string) => {
+    try {
+      const response = await axios.post(
+        'http://localhost:11434/api/generate',
+        {
+          "model": "qwen2.5-coder:latest",
+          // model: "deepseek-coder:latest",
+          prompt: userMessage,
+          stream: false
+        }
+      );
+      const botRes: BotResponse = response.data;
+      return botRes.response;
+    } catch (error) {
+      console.error(error);
     }
-    if (lower.includes('email')) {
-      return "Here's a clean template:\n\nSubject: Following Up\n\nHi [Name],\n\nThank you for your time. I wanted to follow up regarding [topic] and share a few thoughts.\n\nPlease let me know if you'd like to discuss further. I appreciate your consideration.\n\nBest regards,\n[Your Name]";
-    }
-    if (lower.includes('startup') || lower.includes('idea')) {
-      return "Here are a few startup ideas worth exploring:\n\n1. AI-powered personal finance coach\n2. Sustainable packaging marketplace\n3. Remote team wellness platform\n4. Local skill-sharing network\n5. Smart meal-planning assistant\n\nWant me to expand on any of these?";
-    }
-    if (lower.includes('routine') || lower.includes('plan')) {
-      return "A balanced weekly routine:\n\n• Mon–Fri: 30 min morning movement + focused deep work blocks\n• Tue/Thu: Strength training\n• Wed: Light cardio or a walk\n• Weekend: One rest day + one active hobby\n\nConsistency matters more than intensity. Start small and build up.";
-    }
-    return "Great question. Here's a clear way to think about it: break the problem into smaller parts, identify what matters most, and tackle each step one at a time. Let me know if you'd like me to go deeper on any specific point.";
+
+    return "";
+
   };
 
   const handleSend = async () => {
@@ -64,9 +69,11 @@ export default function App() {
 
     await new Promise((r) => setTimeout(r, 1000));
 
+    const aiContent = await aiReply(userMessage.content);
+
     setMessages((prev) => [
       ...prev,
-      { id: Date.now().toString(), role: 'assistant', content: aiReply(userMessage.content) },
+      { id: Date.now().toString(), role: 'assistant', content: aiContent },
     ]);
     setIsTyping(false);
   };
@@ -124,13 +131,38 @@ export default function App() {
                 className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
               >
                 <div
-                  className={`max-w-[80%] whitespace-pre-wrap rounded-3xl px-5 py-3 text-[15px] leading-relaxed ${
-                    message.role === 'user'
+                  className={`max-w-[80%] rounded-3xl px-5 py-3 text-[15px] leading-relaxed ${message.role === 'user'
                       ? 'rounded-br-md bg-zinc-900 text-white'
                       : 'rounded-bl-md bg-zinc-100 text-zinc-900'
-                  }`}
+                    }`}
                 >
-                  {message.content}
+                  <ReactMarkdown
+                    components={{
+                      code({ node, inline, className, children, ...props }: any) {
+                        const match = /language-(\w+)/.exec(className || '');
+                        return !inline && match ? (
+                          <SyntaxHighlighter
+                            style={oneDark}
+                            language={match[1]}
+                            PreTag="div"
+                            className="rounded-xl text-sm my-2"
+                            {...props}
+                          >
+                            {String(children).replace(/\n$/, '')}
+                          </SyntaxHighlighter>
+                        ) : (
+                          <code className="bg-zinc-200 text-zinc-800 rounded px-1 py-0.5 text-sm font-mono" {...props}>
+                            {children}
+                          </code>
+                        );
+                      },
+                      p({ children }) {
+                        return <p className="mb-2 last:mb-0">{children}</p>;
+                      },
+                    }}
+                  >
+                    {message.content}
+                  </ReactMarkdown>
                 </div>
               </div>
             ))}
